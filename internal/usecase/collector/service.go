@@ -81,19 +81,37 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) loadHistoricalData(ctx context.Context, pairs []string) error {
-	// Получаем данные за последние 24 часа
 	endTime := time.Now().Unix()
-	startTime := endTime - 86400 // 24 hours
 
-	timeframes := []string{"1m", "15m", "1h", "1d"}
+	timeframes := []string{"MINUTE_1", "MINUTE_15", "HOUR_1", "DAY_1"}
 
 	for _, pair := range pairs {
 		for _, timeframe := range timeframes {
+			var startTime int64
+			// Пытаемся получить последнюю свечу для пары и таймфрейма
+			lastKline, err := s.klineRepo.GetLastKline(ctx, pair, timeframe)
+			if err == nil && lastKline != nil {
+				startTime = lastKline.UtcEnd
+				log.Printf("Found last kline for %s %s at %v, continuing from there",
+					pair, timeframe, time.Unix(startTime, 0))
+			} else {
+				startTime = time.Date(2024, time.December, 1, 0, 0, 0, 0, time.UTC).Unix()
+				log.Printf("No previous klines found for %s %s, starting from 2024-12-01",
+					pair, timeframe)
+			}
+
+			// Получаем исторические данные
+			log.Printf("Getting historical klines for pair: %s, timeframe: %s from %v to %v",
+				pair, timeframe, time.Unix(startTime, 0), time.Unix(endTime, 0))
+
 			klines, err := s.exchange.GetHistoricalKlines(ctx, pair, timeframe, startTime, endTime)
 			if err != nil {
 				return fmt.Errorf("get historical klines error: %w", err)
 			}
 
+			log.Printf("Received %d klines from API", len(klines))
+
+			// Сохраняем полученные клайны
 			for _, kline := range klines {
 				if err := s.klineRepo.SaveKline(ctx, kline); err != nil {
 					return fmt.Errorf("save kline error: %w", err)
