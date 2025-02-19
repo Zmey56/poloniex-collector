@@ -1,0 +1,27 @@
+database:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  name: poloniex
+  sslmode: disable
+
+poloniex:
+  ws_url: "wss://ws.poloniex.com/ws/public"
+  rest_url: "https://api.poloniex.com"
+  pairs:
+    - "BTC_USDT"
+    - "ETH_USDT"
+    - "TRX_USDT"
+    - "DOGE_USDT"
+    - "BCH_USDT"
+  timeframes:
+    - "1m"
+    - "15m"
+    - "1h"
+    - "1d"
+
+worker:
+  pool_size: 10
+  batch_size: 1000
+  flush_interval: 5s
