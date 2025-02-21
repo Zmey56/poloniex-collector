@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log"
 	"sync"
 
 	"github.com/Zmey56/poloniex-collector/internal/domain/models"
@@ -56,7 +57,7 @@ func (wp *WorkerPool) worker(ctx context.Context) {
 			}
 
 			if err := wp.processor.ProcessTrade(ctx, trade); err != nil {
-				// можно добавить логирование ошибки
+				log.Println("error processing trade:", err)
 				continue
 			}
 		}

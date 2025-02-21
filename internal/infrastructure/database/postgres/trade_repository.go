@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"log"
+
 	"github.com/Zmey56/poloniex-collector/internal/domain/models"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -18,11 +20,12 @@ func NewTradeRepository(pool *pgxpool.Pool) *TradeRepository {
 }
 
 func (r *TradeRepository) SaveTrade(ctx context.Context, trade models.RecentTrade) error {
+	log.Printf("Trade saved %+v", trade)
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO trades (tid, pair, price, amount, side, timestamp)
-         VALUES ($1, $2, $3, $4, $5, $6)
+		`INSERT INTO trades (tid, pair, price, amount, side, timestamp, quantity)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (tid, pair) DO NOTHING`,
-		trade.Tid, trade.Pair, trade.Price, trade.Amount, trade.Side, trade.Timestamp)
+		trade.ID, trade.Symbol, trade.Price, trade.Amount, trade.TakerSide, trade.Timestamp, trade.Quantity)
 	return err
 }
 
@@ -31,10 +34,10 @@ func (r *TradeRepository) SaveTrades(ctx context.Context, trades []models.Recent
 
 	for _, trade := range trades {
 		batch.Queue(
-			`INSERT INTO trades (tid, pair, price, amount, side, timestamp)
-             VALUES ($1, $2, $3, $4, $5, $6)
+			`INSERT INTO trades (tid, pair, price, amount, side, timestamp, quantity)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
              ON CONFLICT (tid, pair) DO NOTHING`,
-			trade.Tid, trade.Pair, trade.Price, trade.Amount, trade.Side, trade.Timestamp)
+			trade.Tid, trade.Pair, trade.Price, trade.Amount, trade.Side, trade.Timestamp, trade.Quantity)
 	}
 
 	br := r.pool.SendBatch(ctx, batch)

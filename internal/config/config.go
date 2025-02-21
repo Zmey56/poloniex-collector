@@ -48,7 +48,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("poloniex.ws_url", "wss://ws.poloniex.com/ws/public")
 	viper.SetDefault("poloniex.rest_url", "https://api.poloniex.com")
 	viper.SetDefault("poloniex.pairs", []string{"BTC_USDT", "ETH_USDT", "TRX_USDT", "DOGE_USDT", "BCH_USDT"})
-	viper.SetDefault("poloniex.timeframes", []string{"1m", "15m", "1h", "1d"})
+	viper.SetDefault("poloniex.timeframes", []string{"MINUTE_1", "MINUTE_15", "HOUR_1", "DAY_1"})
 
 	viper.SetDefault("worker.pool_size", 10)
 	viper.SetDefault("worker.batch_size", 1000)

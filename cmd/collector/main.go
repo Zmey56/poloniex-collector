@@ -17,6 +17,9 @@ import (
 )
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+	log.Println("Starting Poloniex collector...")
+
 	// Загружаем конфигурацию
 	cfg, err := config.Load()
 	if err != nil {
@@ -33,12 +36,7 @@ func main() {
 		cfg.Database.SSLMode,
 	)
 
-	poolConfig, err := pgxpool.ParseConfig(dbURL)
-	if err != nil {
-		log.Fatalf("Failed to parse database config: %v", err)
-	}
-
-	pool, err := pgxpool.ConnectConfig(context.Background(), poolConfig)
+	pool, err := pgxpool.Connect(context.Background(), dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -48,10 +46,10 @@ func main() {
 	tradeRepo := postgres.NewTradeRepository(pool)
 	klineRepo := postgres.NewKlineRepository(pool)
 
-	// Создаем клиент Poloniex
+	// Создаем клиент биржи
 	exchange := poloniex.NewClient(cfg.Poloniex.WSURL, cfg.Poloniex.RestURL)
 
-	// Создаем сервис
+	// Создаем и запускаем сервис
 	service := collector.NewService(
 		tradeRepo,
 		klineRepo,
@@ -67,15 +65,23 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	// Запускаем сервис в отдельной горутине
+	errChan := make(chan error, 1)
 	go func() {
-		<-sigChan
-		log.Println("Shutting down...")
-		cancel()
+		if err := service.Run(ctx); err != nil {
+			errChan <- err
+		}
 	}()
 
-	// Запускаем сервис
-	log.Println("Starting service...")
-	if err := service.Run(ctx); err != nil {
-		log.Fatalf("Service error: %v", err)
+	// Ждем сигнала завершения или ошибки
+	select {
+	case <-sigChan:
+		log.Println("Received shutdown signal")
+		cancel()
+	case err := <-errChan:
+		log.Printf("Service error: %v", err)
+		cancel()
 	}
+
+	log.Println("Shutdown complete")
 }

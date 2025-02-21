@@ -4,26 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math"
-	"strconv"
-	"sync"
 	"time"
 
-	"github.com/Zmey56/poloniex-collector/internal/domain/models"
 	"github.com/Zmey56/poloniex-collector/internal/domain/repository"
+	"github.com/Zmey56/poloniex-collector/internal/service"
 )
 
 type Service struct {
 	tradeRepo  repository.TradeRepository
 	klineRepo  repository.KlineRepository
 	exchange   repository.ExchangeClient
-	workerPool *WorkerPool
-}
-
-type WorkerPool struct {
-	numWorkers int
-	taskQueue  chan *models.RecentTrade
-	wg         sync.WaitGroup
+	workerPool *service.WorkerPool
 }
 
 func NewService(
@@ -32,86 +23,98 @@ func NewService(
 	exchange repository.ExchangeClient,
 	numWorkers int,
 ) *Service {
+	// Создаем процессор для обработки клайнов
+	klineProcessor := service.NewKlineProcessor(klineRepo)
+
+	// Создаем пул воркеров с процессором
+	workerPool := service.NewWorkerPool(numWorkers, klineProcessor)
+
 	return &Service{
 		tradeRepo:  tradeRepo,
 		klineRepo:  klineRepo,
 		exchange:   exchange,
-		workerPool: NewWorkerPool(numWorkers),
-	}
-}
-
-func NewWorkerPool(numWorkers int) *WorkerPool {
-	return &WorkerPool{
-		numWorkers: numWorkers,
-		taskQueue:  make(chan *models.RecentTrade, 1000),
+		workerPool: workerPool,
 	}
 }
 
 func (s *Service) Run(ctx context.Context) error {
-	// Запускаем воркеров
-	s.workerPool.Start(ctx, s.processTradeWorker)
+	// Запускаем пул воркеров
+	s.workerPool.Start(ctx)
+	log.Println("Worker pool started")
 
-	// Список пар для мониторинга
+	// Список торговых пар
 	pairs := []string{"BTC_USDT", "ETH_USDT", "TRX_USDT", "DOGE_USDT", "BCH_USDT"}
 
-	// Получаем исторические данные
+	// Загружаем исторические данные
 	if err := s.loadHistoricalData(ctx, pairs); err != nil {
 		return fmt.Errorf("load historical data error: %w", err)
 	}
 
-	// Подписываемся на текущие сделки
-	tradeChan, err := s.exchange.SubscribeToTrades(ctx, pairs)
+	// Подписываемся на трейды
+	trades, err := s.exchange.SubscribeToTrades(ctx, pairs)
 	if err != nil {
 		return fmt.Errorf("subscribe to trades error: %w", err)
 	}
 
-	// Обрабатываем входящие сделки
-	for trade := range tradeChan {
+	// Обрабатываем входящие трейды
+	for {
 		select {
 		case <-ctx.Done():
+			log.Println("Context cancelled, stopping service")
+			s.workerPool.Stop()
 			return ctx.Err()
-		case s.workerPool.taskQueue <- &trade:
-			// Сделка добавлена в очередь
-		default:
-			log.Printf("Warning: trade queue is full, skipping trade %s", trade.Tid)
+		case trade, ok := <-trades:
+			if !ok {
+				return fmt.Errorf("trade channel closed")
+			}
+
+			// Сохраняем трейд
+			if err := s.tradeRepo.SaveTrade(ctx, trade); err != nil {
+				log.Printf("Error saving trade: %v", err)
+				continue
+			}
+
+			// Отправляем трейд в пул воркеров для создания клайнов
+			if ok := s.workerPool.Submit(&trade); !ok {
+				log.Printf("Failed to submit trade to worker pool: queue is full")
+			}
 		}
 	}
-
-	return nil
 }
 
 func (s *Service) loadHistoricalData(ctx context.Context, pairs []string) error {
-	endTime := time.Now().Unix()
-
+	log.Println("Loading historical data...")
 	timeframes := []string{"MINUTE_1", "MINUTE_15", "HOUR_1", "DAY_1"}
+	endTime := time.Now().Unix()
 
 	for _, pair := range pairs {
 		for _, timeframe := range timeframes {
-			var startTime int64
-			// Пытаемся получить последнюю свечу для пары и таймфрейма
 			lastKline, err := s.klineRepo.GetLastKline(ctx, pair, timeframe)
+
+			var startTime int64
 			if err == nil && lastKline != nil {
 				startTime = lastKline.UtcEnd
 				log.Printf("Found last kline for %s %s at %v, continuing from there",
-					pair, timeframe, time.Unix(startTime, 0))
+					pair, timeframe, startTime)
 			} else {
-				startTime = time.Date(2024, time.December, 1, 0, 0, 0, 0, time.UTC).Unix()
+				// Если нет данных, начинаем с 1 декабря 2024
+				startTime = 1701388800 // 2024-12-01 00:00:00 UTC
 				log.Printf("No previous klines found for %s %s, starting from 2024-12-01",
 					pair, timeframe)
 			}
 
-			// Получаем исторические данные
-			log.Printf("Getting historical klines for pair: %s, timeframe: %s from %v to %v",
-				pair, timeframe, time.Unix(startTime, 0), time.Unix(endTime, 0))
+			if startTime >= endTime {
+				log.Printf("No new data for %s %s", pair, timeframe)
+				continue
+			}
 
 			klines, err := s.exchange.GetHistoricalKlines(ctx, pair, timeframe, startTime, endTime)
 			if err != nil {
 				return fmt.Errorf("get historical klines error: %w", err)
 			}
 
-			log.Printf("Received %d klines from API", len(klines))
+			log.Printf("Received %d klines for %s %s", len(klines), pair, timeframe)
 
-			// Сохраняем полученные клайны
 			for _, kline := range klines {
 				if err := s.klineRepo.SaveKline(ctx, kline); err != nil {
 					return fmt.Errorf("save kline error: %w", err)
@@ -120,95 +123,8 @@ func (s *Service) loadHistoricalData(ctx context.Context, pairs []string) error 
 		}
 	}
 
+	log.Println("Historical data loaded successfully")
 	return nil
-}
-
-func (wp *WorkerPool) Start(ctx context.Context, processor func(context.Context, *models.RecentTrade) error) {
-	for i := 0; i < wp.numWorkers; i++ {
-		wp.wg.Add(1)
-		go func() {
-			defer wp.wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case trade := <-wp.taskQueue:
-					if err := processor(ctx, trade); err != nil {
-						log.Printf("Error processing trade: %v", err)
-					}
-				}
-			}
-		}()
-	}
-}
-
-func (s *Service) processTradeWorker(ctx context.Context, trade *models.RecentTrade) error {
-	// Сохраняем сделку
-	if err := s.tradeRepo.SaveTrade(ctx, *trade); err != nil {
-		return fmt.Errorf("save trade error: %w", err)
-	}
-
-	// Обновляем клайны для всех таймфреймов
-	timeframes := []string{"1m", "15m", "1h", "1d"}
-	for _, tf := range timeframes {
-		if err := s.updateKline(ctx, trade, tf); err != nil {
-			return fmt.Errorf("update kline error: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func (s *Service) updateKline(ctx context.Context, trade *models.RecentTrade, timeframe string) error {
-	interval := getTimeframeInterval(timeframe)
-	beginTime := trade.Timestamp - (trade.Timestamp % interval)
-	endTime := beginTime + interval
-
-	// Получаем существующий клайн или создаем новый
-	kline, err := s.klineRepo.GetLastKline(ctx, trade.Pair, timeframe)
-	if err != nil {
-		price, err := strconv.ParseFloat(trade.Price, 64)
-		if err != nil {
-			return fmt.Errorf("parse price error: %w", err)
-		}
-
-		kline = &models.Kline{
-			Pair:      trade.Pair,
-			TimeFrame: timeframe,
-			O:         price,
-			H:         price,
-			L:         price,
-			C:         price,
-			UtcBegin:  beginTime,
-			UtcEnd:    endTime,
-			VolumeBS:  models.VBS{},
-		}
-	}
-
-	// Обновляем данные клайна
-	price, err := strconv.ParseFloat(trade.Price, 64)
-	if err != nil {
-		return fmt.Errorf("parse price error: %w", err)
-	}
-
-	amount, err := strconv.ParseFloat(trade.Amount, 64)
-	if err != nil {
-		return fmt.Errorf("parse amount error: %w", err)
-	}
-
-	kline.H = math.Max(kline.H, price)
-	kline.L = math.Min(kline.L, price)
-	kline.C = price
-
-	if trade.Side == "buy" {
-		kline.VolumeBS.BuyBase += amount
-		kline.VolumeBS.BuyQuote += amount * price
-	} else {
-		kline.VolumeBS.SellBase += amount
-		kline.VolumeBS.SellQuote += amount * price
-	}
-
-	return s.klineRepo.SaveKline(ctx, *kline)
 }
 
 func getTimeframeInterval(timeframe string) int64 {

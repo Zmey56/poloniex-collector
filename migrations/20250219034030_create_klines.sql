@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS klines (
                         id SERIAL PRIMARY KEY,
                         pair VARCHAR(20) NOT NULL,
-                        timeframe VARCHAR(10) NOT NULL,
+                        interval VARCHAR(10) NOT NULL,
                         open DECIMAL(20, 8) NOT NULL,
                         high DECIMAL(20, 8) NOT NULL,
                         low DECIMAL(20, 8) NOT NULL,
@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS klines (
                         volume_bs JSONB NOT NULL,
                         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                        UNIQUE(pair, timeframe, utc_begin)
+                        UNIQUE(pair, interval, utc_begin)
 );
 
-CREATE INDEX idx_klines_pair_timeframe_utc ON klines(pair, timeframe, utc_begin);
+CREATE INDEX idx_klines_pair_timeframe_utc ON klines(pair, interval, utc_begin);
 -- +goose StatementEnd
 
 -- +goose Down

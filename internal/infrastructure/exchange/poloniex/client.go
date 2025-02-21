@@ -36,8 +36,8 @@ func (c *Client) GetHistoricalKlines(ctx context.Context, pair string, timeframe
 		c.restURL,
 		pair,
 		timeframe,
-		startTime*1000, // Convert to milliseconds
-		endTime*1000,   // Convert to milliseconds
+		startTime*1000,
+		endTime*1000,
 	)
 
 	log.Printf("Making request to: %s", u)
@@ -76,6 +76,8 @@ func (c *Client) GetHistoricalKlines(ctx context.Context, pair string, timeframe
 		startTimestamp := int64(row[12].(float64)) / 1000 // Convert ms to sec
 		endTimestamp := int64(row[13].(float64)) / 1000   // Convert ms to sec
 
+		// Since the API does not provide a division into nuy/sell
+		// we can only roughly divide the volume in half
 		klines[i] = models.Kline{
 			Pair:      pair,
 			TimeFrame: timeframe,
@@ -101,45 +103,55 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 	log.Printf("Starting subscription to trades for pairs: %v", pairs)
 	trades := make(chan models.RecentTrade, 1000)
 
-	u, err := url.Parse(c.wsURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse ws url error: %w", err)
+	// Используем пары в оригинальном формате BTC_USDT
+	formattedPairs := make([]string, len(pairs))
+	for i, pair := range pairs {
+		formattedPairs[i] = strings.ToUpper(pair) // Убедимся, что пара в верхнем регистре
 	}
-	log.Printf("Connecting to WebSocket: %s", u.String())
 
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("dial ws error: %w", err)
+	// Функция для создания подключения
+	connectWebSocket := func() (*websocket.Conn, error) {
+		u, err := url.Parse(c.wsURL)
+		if err != nil {
+			return nil, fmt.Errorf("parse ws url error: %w", err)
+		}
+		log.Printf("Connecting to WebSocket: %s", u.String())
+
+		conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("dial ws error: %w", err)
+		}
+		log.Println("WebSocket connection established")
+		return conn, nil
 	}
-	log.Println("WebSocket connection established")
 
-	// Подписываемся на каналы
-	for _, pair := range pairs {
-		// Заменяем "_" на "/" для формата Poloniex
-		formattedPair := strings.Replace(pair, "_", "/", -1)
+	// Функция для подписки на пары
+	subscribe := func(conn *websocket.Conn) error {
 		subscribeMsg := map[string]interface{}{
 			"event":   "subscribe",
 			"channel": []string{"trades"},
-			"symbols": []string{strings.Replace(pair, "_", "/", -1)},
+			"symbols": formattedPairs,
 		}
 
-		log.Printf("Sending subscription message for pair: %s", formattedPair)
 		msgBytes, _ := json.Marshal(subscribeMsg)
-		log.Printf("Raw subscription message: %s", string(msgBytes))
+		log.Printf("Sending subscription message: %s", string(msgBytes))
 
 		if err := conn.WriteJSON(subscribeMsg); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("subscribe error for pair %s: %w", pair, err)
+			return fmt.Errorf("subscribe error: %w", err)
 		}
-		log.Printf("Successfully subscribed to pair: %s", formattedPair)
+
+		// Ждем подтверждения подписки
+		var response map[string]interface{}
+		if err := conn.ReadJSON(&response); err != nil {
+			return fmt.Errorf("read subscription response error: %w", err)
+		}
+		log.Printf("Subscription response: %+v", response)
+
+		return nil
 	}
 
 	go func() {
-		defer func() {
-			log.Println("Closing WebSocket connection")
-			conn.Close()
-			close(trades)
-		}()
+		defer close(trades)
 
 		for {
 			select {
@@ -147,84 +159,134 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 				log.Println("Context cancelled, stopping WebSocket reader")
 				return
 			default:
-				// Читаем сообщение
-				_, message, err := conn.ReadMessage()
+				conn, err := connectWebSocket()
 				if err != nil {
-					log.Printf("Error reading WebSocket message: %v", err)
-					if websocket.IsUnexpectedCloseError(err) {
-						log.Printf("WebSocket closed unexpectedly: %v", err)
-						// Пытаемся переподключиться
-						time.Sleep(time.Second)
-						if newConn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil); err == nil {
-							conn = newConn
-							log.Println("Successfully reconnected to WebSocket")
-							// Повторная подписка
-							for _, pair := range pairs {
-								formattedPair := strings.Replace(pair, "_", "/", -1)
-								subscribeMsg := map[string]interface{}{
-									"event":   "subscribe",
-									"channel": []string{"trades"},
-									"symbols": []string{formattedPair},
-								}
-								if err := conn.WriteJSON(subscribeMsg); err != nil {
-									log.Printf("Failed to resubscribe to pair %s: %v", pair, err)
-									return
-								}
-								log.Printf("Successfully resubscribed to pair: %s", formattedPair)
+					log.Printf("Connection error: %v, retrying in 5 seconds...", err)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+
+				// Установка таймаутов
+				conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+				conn.SetPongHandler(func(string) error {
+					conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+					return nil
+				})
+
+				// Подписка
+				if err := subscribe(conn); err != nil {
+					log.Printf("Subscription error: %v, retrying...", err)
+					conn.Close()
+					time.Sleep(time.Second)
+					continue
+				}
+
+				// Пинги для поддержания соединения
+				pingTicker := time.NewTicker(30 * time.Second)
+				go func() {
+					defer pingTicker.Stop()
+					for {
+						select {
+						case <-ctx.Done():
+							return
+						case <-pingTicker.C:
+							if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
+								log.Printf("Ping error: %v", err)
+								return
 							}
 						}
 					}
-					continue
-				}
+				}()
 
-				// Логируем raw сообщение
-				log.Printf("Received raw message: %s", string(message))
+			readLoop:
+				for {
+					select {
+					case <-ctx.Done():
+						conn.Close()
+						return
+					default:
+						// Читаем сообщение
+						_, message, err := conn.ReadMessage()
+						if err != nil {
+							if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+								log.Printf("WebSocket error: %v, reconnecting...", err)
+							}
+							conn.Close()
+							break readLoop
+						}
 
-				// Пытаемся распарсить сообщение
-				var msg struct {
-					Event   string `json:"event"`
-					Channel string `json:"channel"`
-					Data    []struct {
-						Symbol   string `json:"symbol"`
-						TradeID  string `json:"id"`
-						Price    string `json:"price"`
-						Quantity string `json:"amount"`
-						Side     string `json:"type"`
-						Ts       int64  `json:"timestamp"`
-					} `json:"data"`
-				}
+						// Логируем сырое сообщение для отладки
+						log.Printf("Received raw message: %s", string(message))
 
-				if err := json.Unmarshal(message, &msg); err != nil {
-					log.Printf("Error unmarshaling message: %v", err)
-					continue
-				}
+						// Структура для распарсивания JSON
+						var msg struct {
+							Channel string `json:"channel"`
+							Data    []struct {
+								Symbol     string `json:"symbol"`
+								Amount     string `json:"amount"`
+								Quantity   string `json:"quantity"`
+								TakerSide  string `json:"takerSide"`
+								CreateTime int64  `json:"createTime"`
+								Price      string `json:"price"`
+								ID         string `json:"id"`
+								Timestamp  int64  `json:"ts"`
+							} `json:"data"`
+						}
 
-				log.Printf("Parsed message: event=%s, channel=%s, data_length=%d",
-					msg.Event, msg.Channel, len(msg.Data))
+						// Декодируем JSON
+						if err := json.Unmarshal(message, &msg); err != nil {
+							log.Printf("Error parsing message: %v", err)
+							continue
+						}
 
-				if msg.Event == "trade" {
-					for _, trade := range msg.Data {
-						log.Printf("Processing trade: ID=%s, Symbol=%s, Price=%s, Amount=%s",
-							trade.TradeID, trade.Symbol, trade.Price, trade.Quantity)
+						// Проверяем, что это сообщение о сделках
+						if msg.Channel != "trades" {
+							continue
+						}
+						log.Printf("Received %+v trades", msg)
 
-						// Заменяем "/" обратно на "_" для соответствия нашему формату
-						pair := strings.Replace(trade.Symbol, "/", "_", -1)
+						// Обрабатываем сделки
+						for _, trade := range msg.Data {
+							price, err := strconv.ParseFloat(trade.Price, 64)
+							if err != nil {
+								log.Printf("Error parsing price: %v", err)
+								continue
+							}
+							amount, err := strconv.ParseFloat(trade.Amount, 64)
+							if err != nil {
+								log.Printf("Error parsing amount: %v", err)
+								continue
+							}
+							quantity, err := strconv.ParseFloat(trade.Quantity, 64)
+							if err != nil {
+								log.Printf("Error parsing quantity: %v", err)
+								continue
+							}
 
-						select {
-						case trades <- models.RecentTrade{
-							Tid:       trade.TradeID,
-							Pair:      pair,
-							Price:     trade.Price,
-							Amount:    trade.Quantity,
-							Side:      trade.Side,
-							Timestamp: trade.Ts,
-						}:
-							log.Printf("Successfully sent trade to channel: %s", trade.TradeID)
-						default:
-							log.Println("Warning: trade channel is full, skipping trade")
+							// Создаем объект сделки
+							recentTrade := models.RecentTrade{
+								Symbol:     trade.Symbol,
+								Amount:     amount,
+								Quantity:   quantity,
+								TakerSide:  trade.TakerSide,
+								Price:      price,
+								CreateTime: trade.CreateTime,
+								Timestamp:  trade.Timestamp,
+								ID:         trade.ID,
+							}
+
+							// Отправляем в канал
+							select {
+							case trades <- recentTrade:
+							default:
+								log.Println("Trade channel is full, dropping trade")
+							}
 						}
 					}
 				}
+
+				log.Println("Reconnecting after read loop end...")
+				time.Sleep(time.Second)
 			}
 		}
 	}()

@@ -27,10 +27,10 @@ func (r *KlineRepository) SaveKline(ctx context.Context, kline models.Kline) err
 
 	_, err = r.pool.Exec(ctx,
 		`INSERT INTO klines (
-            pair, timeframe, open, high, low, close, 
+            pair, interval, open, high, low, close, 
             utc_begin, utc_end, volume_bs, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-        ON CONFLICT (pair, timeframe, utc_begin) DO UPDATE
+        ON CONFLICT (pair, interval, utc_begin) DO UPDATE
         SET 
             high = GREATEST(klines.high, EXCLUDED.high),
             low = LEAST(klines.low, EXCLUDED.low),
@@ -50,15 +50,25 @@ func (r *KlineRepository) SaveKline(ctx context.Context, kline models.Kline) err
 	return err
 }
 
+// count in table
+func (r *KlineRepository) CountKlines(ctx context.Context) (int, error) {
+	var count int
+	err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM klines").Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (r *KlineRepository) GetLastKline(ctx context.Context, pair, timeframe string) (*models.Kline, error) {
 	var kline models.Kline
 	var volumeBSJson []byte
 
 	err := r.pool.QueryRow(ctx,
-		`SELECT pair, timeframe, open, high, low, close, 
+		`SELECT pair, interval, open, high, low, close, 
                 utc_begin, utc_end, volume_bs
          FROM klines
-         WHERE pair = $1 AND timeframe = $2
+         WHERE pair = $1 AND interval = $2
          ORDER BY utc_begin DESC
          LIMIT 1`,
 		pair, timeframe).Scan(
@@ -85,11 +95,11 @@ func (r *KlineRepository) GetLastKline(ctx context.Context, pair, timeframe stri
 
 func (r *KlineRepository) GetKlinesByTimeRange(ctx context.Context, pair, timeframe string, startTime, endTime int64) ([]models.Kline, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT pair, timeframe, open, high, low, close, 
+		`SELECT pair, interval, open, high, low, close, 
                 utc_begin, utc_end, volume_bs
          FROM klines
          WHERE pair = $1 
-           AND timeframe = $2 
+           AND interval = $2 
            AND utc_begin >= $3 
            AND utc_end <= $4
          ORDER BY utc_begin`,
