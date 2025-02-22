@@ -44,19 +44,15 @@ func TestKlineRepository_SaveAndGetKline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Сохраняем клайн
 	err = repo.SaveKline(ctx, kline)
 	require.NoError(t, err)
 
-	// Ждем завершения транзакции перед чтением
 	time.Sleep(1000 * time.Millisecond)
 
-	// Получаем сохраненный клайн
 	savedKline, err := repo.GetLastKline(ctx, kline.Pair, kline.TimeFrame)
 	require.NoError(t, err)
 	require.NotNil(t, savedKline)
 
-	// Проверяем соответствие данных
 	assert.Equal(t, kline.Pair, savedKline.Pair)
 	assert.Equal(t, kline.TimeFrame, savedKline.TimeFrame)
 	assert.Equal(t, kline.O, savedKline.O)
@@ -77,9 +73,6 @@ func TestKlineRepository_GetKlinesByTimeRange(t *testing.T) {
 
 	repo := NewKlineRepository(container.Pool)
 
-	// Создаем несколько клайнов с разным временем
-	// firstTime := time.Now().Truncate(time.Second)
-
 	now := time.Now().Truncate(time.Second)
 	nowDiffMinute := now.Add(-time.Minute)
 	nowDiffTwoMinutes := now.Add(-2 * time.Minute)
@@ -92,24 +85,20 @@ func TestKlineRepository_GetKlinesByTimeRange(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Сохраняем клайны
 	for _, k := range klines {
 		fmt.Printf("Saving kline: %+v\n", k)
 		err := repo.SaveKline(ctx, k)
 		require.NoError(t, err)
 	}
 
-	// Подсчитываем количество записей в базе данных
 	var count int
 	count, err = repo.CountKlines(ctx)
 	require.NoError(t, err)
 	fmt.Println("Count of klines: ", count)
 
-	// Ждем завершения всех транзакций перед чтением
 	time.Sleep(1000 * time.Millisecond)
 
-	// Получаем клайны за определенный период
-	startTime := nowDiffTwoMinutes.Unix() - 500 // 500 - чтобы попасть в диапазон
+	startTime := nowDiffTwoMinutes.Unix() - 500
 	endTime := time.Now().Add(time.Minute).Truncate(time.Second).Unix()
 	fmt.Printf("Start time: %v, end time: %v\n", startTime, endTime)
 	result, err := repo.GetKlinesByTimeRange(ctx, "BTC_USDT", "1m", startTime, endTime)
@@ -118,7 +107,6 @@ func TestKlineRepository_GetKlinesByTimeRange(t *testing.T) {
 		fmt.Printf("Result kline: %+v\n", k)
 	}
 
-	// Проверяем, что получены 3 клайна
 	require.Len(t, result, 3)
 	assert.Len(t, result, 3)
 }

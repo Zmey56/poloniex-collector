@@ -55,7 +55,6 @@ func (p *KlineProcessor) ProcessTrade(ctx context.Context, trade *models.RecentT
 		log.Printf("Converting timestamps: BeginTime=%s, EndTime=%s", time.Unix(0, beginTime), time.Unix(0, endTime))
 
 		var klineExists bool
-		// lastKline, err := p.repository.GetKlineByInterval(ctx, trade.Pair, timeframe, beginTime/1000000000)
 		lastKline, err := p.repository.GetLastKline(ctx, trade.Pair, timeframe)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err

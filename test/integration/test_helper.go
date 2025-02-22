@@ -11,13 +11,11 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// PostgresContainer содержит контейнер и пул подключений к PostgreSQL
 type PostgresContainer struct {
 	Container testcontainers.Container
 	Pool      *pgxpool.Pool
 }
 
-// NewPostgresContainer создает новый тестовый контейнер PostgreSQL
 func NewPostgresContainer(t *testing.T) (*PostgresContainer, error) {
 	ctx := context.Background()
 
@@ -33,7 +31,7 @@ func NewPostgresContainer(t *testing.T) (*PostgresContainer, error) {
 			"POSTGRES_USER":     "test",
 			"POSTGRES_PASSWORD": "test",
 		},
-		AutoRemove: false, // Отключаем автоматическое удаление контейнера
+		AutoRemove: false,
 	}
 
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -44,7 +42,6 @@ func NewPostgresContainer(t *testing.T) (*PostgresContainer, error) {
 		return nil, fmt.Errorf("failed to start container: %v", err)
 	}
 
-	// Проверяем, не завершился ли контейнер
 	state, err := container.State(ctx)
 	if err != nil {
 		container.Terminate(ctx)
@@ -74,10 +71,8 @@ func NewPostgresContainer(t *testing.T) (*PostgresContainer, error) {
 	)
 	fmt.Printf("Connection string: %s\n", connString)
 
-	// Добавляем задержку перед подключением
 	time.Sleep(2 * time.Second)
 
-	// Создаем пул подключений с повторными попытками
 	var pool *pgxpool.Pool
 	for i := 0; i < 5; i++ {
 		pool, err = pgxpool.Connect(ctx, connString)
@@ -105,7 +100,6 @@ func NewPostgresContainer(t *testing.T) (*PostgresContainer, error) {
 	}, nil
 }
 
-// Close закрывает пул подключений и останавливает контейнер
 func (pc *PostgresContainer) Close() {
 	if pc.Pool != nil {
 		pc.Pool.Close()
@@ -115,7 +109,6 @@ func (pc *PostgresContainer) Close() {
 	}
 }
 
-// applyMigrations применяет миграции к тестовой базе данных
 func applyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	migrations := []string{
 		`CREATE TABLE IF NOT EXISTS klines (

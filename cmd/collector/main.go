@@ -20,13 +20,11 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	log.Println("Starting Poloniex collector...")
 
-	// Загружаем конфигурацию
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Подключаемся к базе данных
 	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
 		cfg.Database.User,
 		cfg.Database.Password,
@@ -42,14 +40,11 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Создаем репозитории
 	tradeRepo := postgres.NewTradeRepository(pool)
 	klineRepo := postgres.NewKlineRepository(pool)
 
-	// Создаем клиент биржи
 	exchange := poloniex.NewClient(cfg.Poloniex.WSURL, cfg.Poloniex.RestURL)
 
-	// Создаем и запускаем сервис
 	service := collector.NewService(
 		tradeRepo,
 		klineRepo,
@@ -57,15 +52,12 @@ func main() {
 		cfg.Worker.PoolSize,
 	)
 
-	// Создаем контекст с отменой
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Обрабатываем сигналы завершения
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Запускаем сервис в отдельной горутине
 	errChan := make(chan error, 1)
 	go func() {
 		if err := service.Run(ctx); err != nil {
@@ -73,7 +65,6 @@ func main() {
 		}
 	}()
 
-	// Ждем сигнала завершения или ошибки
 	select {
 	case <-sigChan:
 		log.Println("Received shutdown signal")

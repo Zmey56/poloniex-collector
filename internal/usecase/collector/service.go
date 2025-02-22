@@ -23,10 +23,8 @@ func NewService(
 	exchange repository.ExchangeClient,
 	numWorkers int,
 ) *Service {
-	// Создаем процессор для обработки клайнов
 	klineProcessor := service.NewKlineProcessor(klineRepo)
 
-	// Создаем пул воркеров с процессором
 	workerPool := service.NewWorkerPool(numWorkers, klineProcessor)
 
 	return &Service{
@@ -38,25 +36,20 @@ func NewService(
 }
 
 func (s *Service) Run(ctx context.Context) error {
-	// Запускаем пул воркеров
 	s.workerPool.Start(ctx)
 	log.Println("Worker pool started")
 
-	// Список торговых пар
 	pairs := []string{"BTC_USDT", "ETH_USDT", "TRX_USDT", "DOGE_USDT", "BCH_USDT"}
 
-	// Загружаем исторические данные
 	if err := s.loadHistoricalData(ctx, pairs); err != nil {
 		return fmt.Errorf("load historical data error: %w", err)
 	}
 
-	// Подписываемся на трейды
 	trades, err := s.exchange.SubscribeToTrades(ctx, pairs)
 	if err != nil {
 		return fmt.Errorf("subscribe to trades error: %w", err)
 	}
 
-	// Обрабатываем входящие трейды
 	for {
 		select {
 		case <-ctx.Done():
@@ -68,13 +61,11 @@ func (s *Service) Run(ctx context.Context) error {
 				return fmt.Errorf("trade channel closed")
 			}
 
-			// Сохраняем трейд
 			if err := s.tradeRepo.SaveTrade(ctx, trade); err != nil {
 				log.Printf("Error saving trade: %v", err)
 				continue
 			}
 
-			// Отправляем трейд в пул воркеров для создания клайнов
 			if ok := s.workerPool.Submit(&trade); !ok {
 				log.Printf("Failed to submit trade to worker pool: queue is full")
 			}
@@ -97,7 +88,6 @@ func (s *Service) loadHistoricalData(ctx context.Context, pairs []string) error 
 				log.Printf("Found last kline for %s %s at %v, continuing from there",
 					pair, timeframe, startTime)
 			} else {
-				// Если нет данных, начинаем с 1 декабря 2024
 				startTime = 1701388800 // 2024-12-01 00:00:00 UTC
 				log.Printf("No previous klines found for %s %s, starting from 2024-12-01",
 					pair, timeframe)

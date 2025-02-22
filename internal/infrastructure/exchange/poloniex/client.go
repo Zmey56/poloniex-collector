@@ -67,7 +67,6 @@ func (c *Client) GetHistoricalKlines(ctx context.Context, pair string, timeframe
 			continue
 		}
 
-		// Convert values from interface{} to appropriate types
 		open, _ := strconv.ParseFloat(row[0].(string), 64)
 		high, _ := strconv.ParseFloat(row[1].(string), 64)
 		low, _ := strconv.ParseFloat(row[2].(string), 64)
@@ -106,13 +105,11 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 	log.Printf("Starting subscription to trades for pairs: %v", pairs)
 	trades := make(chan models.RecentTrade, 1000)
 
-	// Используем пары в оригинальном формате BTC_USDT
 	formattedPairs := make([]string, len(pairs))
 	for i, pair := range pairs {
 		formattedPairs[i] = strings.ToUpper(pair) // Убедимся, что пара в верхнем регистре
 	}
 
-	// Функция для создания подключения
 	connectWebSocket := func() (*websocket.Conn, error) {
 		u, err := url.Parse(c.wsURL)
 		if err != nil {
@@ -128,7 +125,6 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 		return conn, nil
 	}
 
-	// Функция для подписки на пары
 	subscribe := func(conn *websocket.Conn) error {
 		subscribeMsg := map[string]interface{}{
 			"event":   "subscribe",
@@ -143,7 +139,6 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 			return fmt.Errorf("subscribe error: %w", err)
 		}
 
-		// Ждем подтверждения подписки
 		var response map[string]interface{}
 		if err := conn.ReadJSON(&response); err != nil {
 			return fmt.Errorf("read subscription response error: %w", err)
@@ -169,14 +164,12 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 					continue
 				}
 
-				// Установка таймаутов
 				conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 				conn.SetPongHandler(func(string) error {
 					conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 					return nil
 				})
 
-				// Подписка
 				if err := subscribe(conn); err != nil {
 					log.Printf("Subscription error: %v, retrying...", err)
 					conn.Close()
@@ -184,7 +177,6 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 					continue
 				}
 
-				// Пинги для поддержания соединения
 				pingTicker := time.NewTicker(30 * time.Second)
 				go func() {
 					defer pingTicker.Stop()
@@ -208,7 +200,6 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 						conn.Close()
 						return
 					default:
-						// Читаем сообщение
 						_, message, err := conn.ReadMessage()
 						if err != nil {
 							if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -218,10 +209,8 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 							break readLoop
 						}
 
-						// Логируем сырое сообщение для отладки
 						log.Printf("Received raw message: %s", string(message))
 
-						// Структура для распарсивания JSON
 						var msg struct {
 							Channel string `json:"channel"`
 							Data    []struct {
@@ -236,19 +225,16 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 							} `json:"data"`
 						}
 
-						// Декодируем JSON
 						if err := json.Unmarshal(message, &msg); err != nil {
 							log.Printf("Error parsing message: %v", err)
 							continue
 						}
 
-						// Проверяем, что это сообщение о сделках
 						if msg.Channel != "trades" {
 							continue
 						}
 						log.Printf("Received %+v trades", msg)
 
-						// Обрабатываем сделки
 						for _, trade := range msg.Data {
 							price, err := strconv.ParseFloat(trade.Price, 64)
 							if err != nil {
@@ -269,7 +255,6 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 							amountStr := fmt.Sprintf("%.8f", amount)
 							priceStr := fmt.Sprintf("%.8f", price)
 
-							// Создаем объект сделки
 							recentTrade := models.RecentTrade{
 								Symbol:     trade.Symbol,
 								Pair:       trade.Symbol,
@@ -282,7 +267,6 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 								Tid:        trade.ID,
 							}
 
-							// Отправляем в канал
 							select {
 							case trades <- recentTrade:
 							default:
@@ -299,19 +283,4 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 	}()
 
 	return trades, nil
-}
-
-func getTimeframeInterval(timeframe string) int64 {
-	switch timeframe {
-	case "1m":
-		return 60
-	case "15m":
-		return 900
-	case "1h":
-		return 3600
-	case "1d":
-		return 86400
-	default:
-		return 60
-	}
 }

@@ -71,8 +71,8 @@ func TestClient_GetHistoricalKlines(t *testing.T) {
 	assert.Equal(t, int64(1719975420), kline.UtcBegin)
 	assert.Equal(t, int64(1719975479), kline.UtcEnd)
 
-	assert.Equal(t, 250.0, kline.VolumeBS.BuyBase)   // quantity/2
-	assert.Equal(t, 250.0, kline.VolumeBS.SellBase)  // quantity/2
-	assert.Equal(t, 500.0, kline.VolumeBS.BuyQuote)  // amount/2
-	assert.Equal(t, 500.0, kline.VolumeBS.SellQuote) // amount/2
+	assert.Equal(t, 250.0, kline.VolumeBS.BuyBase)
+	assert.Equal(t, 250.0, kline.VolumeBS.SellBase)
+	assert.Equal(t, 500.0, kline.VolumeBS.BuyQuote)
+	assert.Equal(t, 500.0, kline.VolumeBS.SellQuote)
 }

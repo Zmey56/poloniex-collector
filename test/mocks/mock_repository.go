@@ -86,6 +86,21 @@ func (m *MockKlineRepository) EXPECT() *MockKlineRepositoryMockRecorder {
 	return m.recorder
 }
 
+// GetKlineByInterval mocks base method.
+func (m *MockKlineRepository) GetKlineByInterval(ctx context.Context, pair, timeframe string, beginTime int64) (*models.Kline, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetKlineByInterval", ctx, pair, timeframe, beginTime)
+	ret0, _ := ret[0].(*models.Kline)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetKlineByInterval indicates an expected call of GetKlineByInterval.
+func (mr *MockKlineRepositoryMockRecorder) GetKlineByInterval(ctx, pair, timeframe, beginTime interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKlineByInterval", reflect.TypeOf((*MockKlineRepository)(nil).GetKlineByInterval), ctx, pair, timeframe, beginTime)
+}
+
 // GetKlinesByTimeRange mocks base method.
 func (m *MockKlineRepository) GetKlinesByTimeRange(ctx context.Context, pair, timeframe string, startTime, endTime int64) ([]models.Kline, error) {
 	m.ctrl.T.Helper()
