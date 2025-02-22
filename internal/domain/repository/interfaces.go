@@ -15,6 +15,7 @@ type KlineRepository interface {
 	SaveKline(ctx context.Context, kline models.Kline) error
 	GetLastKline(ctx context.Context, pair, timeframe string) (*models.Kline, error)
 	GetKlinesByTimeRange(ctx context.Context, pair, timeframe string, startTime, endTime int64) ([]models.Kline, error)
+	GetKlineByInterval(ctx context.Context, pair, timeframe string, beginTime int64) (*models.Kline, error)
 }
 
 type ExchangeClient interface {

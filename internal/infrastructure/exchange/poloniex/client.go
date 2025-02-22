@@ -73,11 +73,12 @@ func (c *Client) GetHistoricalKlines(ctx context.Context, pair string, timeframe
 		low, _ := strconv.ParseFloat(row[2].(string), 64)
 		close, _ := strconv.ParseFloat(row[3].(string), 64)
 		volume, _ := strconv.ParseFloat(row[4].(string), 64)
-		startTimestamp := int64(row[12].(float64)) / 1000 // Convert ms to sec
-		endTimestamp := int64(row[13].(float64)) / 1000   // Convert ms to sec
+		startTimestamp := int64(row[12].(float64))
+		endTimestamp := int64(row[13].(float64))
 
-		// Since the API does not provide a division into nuy/sell
-		// we can only roughly divide the volume in half
+		startTimeDt := time.Unix(startTimestamp/1000, (startTimestamp%1000)*1e6)
+		endTimeDt := time.Unix(endTimestamp/1000, (endTimestamp%1000)*1e6)
+
 		klines[i] = models.Kline{
 			Pair:      pair,
 			TimeFrame: timeframe,
@@ -87,6 +88,8 @@ func (c *Client) GetHistoricalKlines(ctx context.Context, pair string, timeframe
 			C:         close,
 			UtcBegin:  startTimestamp,
 			UtcEnd:    endTimestamp,
+			BeginDt:   startTimeDt,
+			EndDt:     endTimeDt,
 			VolumeBS: models.VBS{
 				BuyBase:   volume / 2,
 				SellBase:  volume / 2,
@@ -263,16 +266,20 @@ func (c *Client) SubscribeToTrades(ctx context.Context, pairs []string) (<-chan 
 								continue
 							}
 
+							amountStr := fmt.Sprintf("%.8f", amount)
+							priceStr := fmt.Sprintf("%.8f", price)
+
 							// Создаем объект сделки
 							recentTrade := models.RecentTrade{
 								Symbol:     trade.Symbol,
-								Amount:     amount,
+								Pair:       trade.Symbol,
+								Amount:     amountStr,
 								Quantity:   quantity,
-								TakerSide:  trade.TakerSide,
-								Price:      price,
+								Side:       trade.TakerSide,
+								Price:      priceStr,
 								CreateTime: trade.CreateTime,
 								Timestamp:  trade.Timestamp,
-								ID:         trade.ID,
+								Tid:        trade.ID,
 							}
 
 							// Отправляем в канал

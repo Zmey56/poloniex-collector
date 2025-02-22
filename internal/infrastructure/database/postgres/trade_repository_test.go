@@ -31,10 +31,10 @@ func TestTradeRepository_SaveTrade(t *testing.T) {
 		{
 			name: "valid trade",
 			trade: models.RecentTrade{
-				Tid:       123,
+				Tid:       "123",
 				Pair:      "BTC_USDT",
-				Price:     50000.00,
-				Amount:    1.5,
+				Price:     "50000.00",
+				Amount:    "1.5",
 				Side:      "buy",
 				Timestamp: time.Now().Unix(),
 			},
@@ -43,10 +43,10 @@ func TestTradeRepository_SaveTrade(t *testing.T) {
 		{
 			name: "duplicate trade",
 			trade: models.RecentTrade{
-				Tid:       123,
+				Tid:       "123",
 				Pair:      "BTC_USDT",
-				Price:     50000.00,
-				Amount:    1.5,
+				Price:     "50000.00",
+				Amount:    "1.5",
 				Side:      "buy",
 				Timestamp: time.Now().Unix(),
 			},
@@ -79,18 +79,18 @@ func TestTradeRepository_SaveTrades(t *testing.T) {
 
 	trades := []models.RecentTrade{
 		{
-			Tid:       123,
+			Tid:       "123",
 			Pair:      "BTC_USDT",
-			Price:     50000.00,
-			Amount:    1.5,
+			Price:     "50000.00",
+			Amount:    "1.5",
 			Side:      "buy",
 			Timestamp: time.Now().Unix(),
 		},
 		{
-			Tid:       124,
+			Tid:       "124",
 			Pair:      "BTC_USDT",
-			Price:     50100.00,
-			Amount:    2.0,
+			Price:     "50100.00",
+			Amount:    "2.0",
 			Side:      "sell",
 			Timestamp: time.Now().Unix(),
 		},

@@ -25,7 +25,7 @@ func (r *TradeRepository) SaveTrade(ctx context.Context, trade models.RecentTrad
 		`INSERT INTO trades (tid, pair, price, amount, side, timestamp, quantity)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (tid, pair) DO NOTHING`,
-		trade.ID, trade.Symbol, trade.Price, trade.Amount, trade.TakerSide, trade.Timestamp, trade.Quantity)
+		trade.Tid, trade.Symbol, trade.Price, trade.Amount, trade.Side, trade.Timestamp, trade.Quantity)
 	return err
 }
 

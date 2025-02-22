@@ -116,6 +116,7 @@ func (s *Service) loadHistoricalData(ctx context.Context, pairs []string) error 
 			log.Printf("Received %d klines for %s %s", len(klines), pair, timeframe)
 
 			for _, kline := range klines {
+				log.Printf("Saving get historical klines: %+v", kline)
 				if err := s.klineRepo.SaveKline(ctx, kline); err != nil {
 					return fmt.Errorf("save kline error: %w", err)
 				}
@@ -125,19 +126,4 @@ func (s *Service) loadHistoricalData(ctx context.Context, pairs []string) error 
 
 	log.Println("Historical data loaded successfully")
 	return nil
-}
-
-func getTimeframeInterval(timeframe string) int64 {
-	switch timeframe {
-	case "1m":
-		return 60
-	case "15m":
-		return 900
-	case "1h":
-		return 3600
-	case "1d":
-		return 86400
-	default:
-		return 60
-	}
 }
