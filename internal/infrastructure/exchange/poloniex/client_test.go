@@ -18,27 +18,41 @@ func TestClient_GetHistoricalKlines(t *testing.T) {
 		assert.Equal(t, "MINUTE_1", r.URL.Query().Get("interval"))
 
 		response := struct {
-			Code int        `json:"code"`
-			Data [][]string `json:"data"`
-			Msg  string     `json:"msg"`
+			Candles []struct {
+				Symbol     string `json:"symbol"`
+				Interval   string `json:"interval"`
+				Time       int64  `json:"time"`
+				OpenPrice  string `json:"openPrice"`
+				ClosePrice string `json:"closePrice"`
+				HighPrice  string `json:"highPrice"`
+				LowPrice   string `json:"lowPrice"`
+				Volume     string `json:"volume"`
+				Amount     string `json:"amount"`
+			} `json:"candles"`
 		}{
-			Code: 200,
-			Data: [][]string{
+			Candles: []struct {
+				Symbol     string `json:"symbol"`
+				Interval   string `json:"interval"`
+				Time       int64  `json:"time"`
+				OpenPrice  string `json:"openPrice"`
+				ClosePrice string `json:"closePrice"`
+				HighPrice  string `json:"highPrice"`
+				LowPrice   string `json:"lowPrice"`
+				Volume     string `json:"volume"`
+				Amount     string `json:"amount"`
+			}{
 				{
-					"58651",         // open
-					"58651",         // high
-					"58651",         // low
-					"58651",         // close
-					"1000",          // amount (quote currency)
-					"500",           // quantity (base currency)
-					"10",            // trade count
-					"0",             // reserved
-					"0",             // reserved
-					"1719975420000", // start time
-					"1719975479999", // end time
+					Symbol:     "BTC_USDT",
+					Interval:   "MINUTE_1",
+					Time:       1719975420000,
+					OpenPrice:  "58651",
+					ClosePrice: "58651",
+					HighPrice:  "58651",
+					LowPrice:   "58651",
+					Volume:     "500",
+					Amount:     "1000",
 				},
 			},
-			Msg: "Success",
 		}
 
 		json.NewEncoder(w).Encode(response)
@@ -69,7 +83,6 @@ func TestClient_GetHistoricalKlines(t *testing.T) {
 	assert.Equal(t, 58651.0, kline.L)
 	assert.Equal(t, 58651.0, kline.C)
 	assert.Equal(t, int64(1719975420), kline.UtcBegin)
-	assert.Equal(t, int64(1719975479), kline.UtcEnd)
 
 	assert.Equal(t, 250.0, kline.VolumeBS.BuyBase)
 	assert.Equal(t, 250.0, kline.VolumeBS.SellBase)

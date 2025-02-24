@@ -121,6 +121,8 @@ func applyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
             close DECIMAL(20, 8) NOT NULL,
             utc_begin BIGINT NOT NULL,
             utc_end BIGINT NOT NULL,
+            begin_dt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            end_dt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
             volume_bs JSONB NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
