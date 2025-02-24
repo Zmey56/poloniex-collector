@@ -40,7 +40,6 @@ poloniex-collector/
 - **Go 1.22+**
 - **PostgreSQL**
 - **Docker & Docker Compose** (для контейнеризации)
-- **Redis** (для кеширования)
 
 ### Запуск локально
 1. Клонируйте репозиторий:
@@ -61,18 +60,6 @@ poloniex-collector/
    ```sh
    go run cmd/collector/main.go
    ```
-
-## Конфигурация
-Конфигурация проекта задается в файле `config.yaml`:
-```yaml
-database_url: "postgres://user:password@localhost:5432/poloniex"
-exchange_api_key: "your_api_key"
-exchange_api_secret: "your_api_secret"
-log_level: "info"
-cache_enabled: true
-cache_ttl: 60 # Время жизни кеша в секундах
-metrics_enabled: true
-```
 
 ## Тестирование
 Для запуска тестов используйте:
@@ -98,8 +85,11 @@ docker-compose run --rm migrator
 ```
 
 ## Что необходимо дальше сделать:
-1. Сначала реализовать надежное WebSocket подключение с переподключением
+1. Перенести секреты в Vault или другой секретный менеджер
+2. Сначала реализовать надежное WebSocket подключение с переподключением
 2. Добавить базовые метрики и логирование
 3. Расширить тестовое покрытие и доделать тесты
 4. Улучшить обработку ошибок
 5. Добавить оптимизации производительности
+6. Добавить Redis для кэширования данных
+

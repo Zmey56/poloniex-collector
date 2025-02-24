@@ -1,5 +1,5 @@
 # Dockerfile
-FROM --platform=linux/amd64 golang:1.23.4-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.23.4-alpine AS builder
 
 WORKDIR /app
 
@@ -16,9 +16,10 @@ RUN go mod download
 
 COPY . .
 
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -o /app/bin/collector cmd/collector/main.go
+# Позволим Go самому определить архитектуру
+RUN CGO_ENABLED=1 go build -o /app/bin/collector cmd/collector/main.go
 
-FROM --platform=linux/amd64 alpine:latest
+FROM alpine:latest
 
 WORKDIR /app
 

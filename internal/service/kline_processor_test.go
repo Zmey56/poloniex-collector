@@ -59,17 +59,17 @@ func TestKlineProcessor_ProcessTrade(t *testing.T) {
 			setupMock: func() {
 				mockRepo.EXPECT().
 					GetLastKline(gomock.Any(), "BTC_USDT", "MINUTE_1").
-						Return(&models.Kline{
-							Pair:      "BTC_USDT",
-							TimeFrame: "MINUTE_1",
-							O:         50000.0,
-							H:         50000.0,
-							L:         50000.0,
-							C:         50000.0,
-							UtcBegin:  time.Now().Unix(),
-							UtcEnd:    time.Now().Add(time.Minute).Unix(),
-							VolumeBS:  models.VBS{},
-						}, nil)
+					Return(&models.Kline{
+						Pair:      "BTC_USDT",
+						TimeFrame: "MINUTE_1",
+						O:         50000.0,
+						H:         50000.0,
+						L:         50000.0,
+						C:         50000.0,
+						UtcBegin:  time.Now().Unix(),
+						UtcEnd:    time.Now().Add(time.Minute).Unix(),
+						VolumeBS:  models.VBS{},
+					}, nil)
 
 				mockRepo.EXPECT().
 					SaveKline(gomock.Any(), gomock.Any()).
@@ -118,9 +118,9 @@ func TestKlineProcessor_MultipleTimeframes(t *testing.T) {
 
 		mockRepo.EXPECT().
 			SaveKline(gomock.Any(), gomock.Any()).
-				Do(func(_ context.Context, k models.Kline) {
-					assert.Equal(t, tf, k.TimeFrame)
-				}).
+			Do(func(_ context.Context, k models.Kline) {
+				assert.Equal(t, tf, k.TimeFrame)
+			}).
 			Return(nil)
 	}
 
